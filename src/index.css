@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+:root {
+  --color-known: #2563eb;
+  --color-unknown: #f59e0b;
+  --color-continuation: #16a34a;
+  --color-exercise: #dc2626;
+  --color-dt: #2563eb;
+  --color-dw: #dc2626;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800;
+}
