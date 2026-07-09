@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { europeanParams } from '../../data/parameters'
 import { Katex } from '../Math/Katex'
 import { SurfacePlot } from './SurfacePlot'
@@ -51,7 +51,7 @@ function VectorMath({ values }: { values: number[] }) {
   )
 }
 
-function MatrixTable({ title, values }: { title: string; values: number[][] }) {
+function MatrixTable({ title, values }: { title: ReactNode; values: number[][] }) {
   return (
     <div>
       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
@@ -89,7 +89,6 @@ export function MethodOfLinesRK4CalculationExample() {
   const [Nt, setNt] = useState(10)
   const [r, setR] = useState(europeanParams.r)
   const [sigma, setSigma] = useState(europeanParams.sigma)
-  const [selectedI, setSelectedI] = useState(4)
   const [animationStep, setAnimationStep] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [surfaceMode, setSurfaceMode] = useState<'U' | 'V'>('U')
@@ -152,14 +151,12 @@ export function MethodOfLinesRK4CalculationExample() {
       ...AML.map((row) => row.reduce((sum, value) => sum + Math.abs(value), 0)),
     )
 
-    return { AML, K, S, U, alpha, beta, boundaryVector, gamma, hS, ht, maxRowMagnitude, stageByStep, surfaceValues, t }
+    return { AML, K, S, U, boundaryVector, hS, ht, maxRowMagnitude, stageByStep, surfaceValues, t }
   }, [NS, Nt, optionType, r, sigma])
 
   const totalSteps = Nt
   const isComplete = animationStep >= totalSteps
   const activeJ = Math.min(animationStep, Nt - 1)
-  const activeI = Math.min(selectedI, NS - 1)
-  const activeRow = activeI - 1
   const activeStage = model.stageByStep[activeJ]
   const stabilityProxy = model.ht * model.maxRowMagnitude
   const displayedSurface =
@@ -182,22 +179,22 @@ export function MethodOfLinesRK4CalculationExample() {
   const stageValues = [activeStage.f1, activeStage.f2, activeStage.f3, activeStage.f4]
   const stageBoundaryVectors = stageTimes.map((time) => model.boundaryVector(time))
   const stageStateLabels = [
-    `\\mathbf U^{${activeJ}}`,
-    `\\mathbf U^{${activeJ}}+\\mathbf f_1/2`,
-    `\\mathbf U^{${activeJ}}+\\mathbf f_2/2`,
-    `\\mathbf U^{${activeJ}}+\\mathbf f_3`,
+    `W^{[${activeJ}]}`,
+    `W^{[${activeJ}]}+\\mathbf f_1/2`,
+    `W^{[${activeJ}]}+\\mathbf f_2/2`,
+    `W^{[${activeJ}]}+\\mathbf f_3`,
   ]
   const stageBoundaryLabels = [
-    `\\mathbf b_{ML}(t_${activeJ})`,
-    `\\mathbf b_{ML}(t_${activeJ}+h_t/2)`,
-    `\\mathbf b_{ML}(t_${activeJ}+h_t/2)`,
-    `\\mathbf b_{ML}(t_${activeJ}+h_t)`,
+    `b_{ML}(t_${activeJ})`,
+    `b_{ML}(t_${activeJ}+h_t/2)`,
+    `b_{ML}(t_${activeJ}+h_t/2)`,
+    `b_{ML}(t_${activeJ}+h_t)`,
   ]
   const stageFormulas = [
-    `\\mathbf f_1=h_t\\left(A_{ML}\\mathbf U^{${activeJ}}+\\mathbf b_{ML}(t_${activeJ})\\right)`,
-    `\\mathbf f_2=h_t\\left(A_{ML}\\left(\\mathbf U^{${activeJ}}+\\frac{\\mathbf f_1}{2}\\right)+\\mathbf b_{ML}\\left(t_${activeJ}+\\frac{h_t}{2}\\right)\\right)`,
-    `\\mathbf f_3=h_t\\left(A_{ML}\\left(\\mathbf U^{${activeJ}}+\\frac{\\mathbf f_2}{2}\\right)+\\mathbf b_{ML}\\left(t_${activeJ}+\\frac{h_t}{2}\\right)\\right)`,
-    `\\mathbf f_4=h_t\\left(A_{ML}\\left(\\mathbf U^{${activeJ}}+\\mathbf f_3\\right)+\\mathbf b_{ML}(t_${activeJ}+h_t)\\right)`,
+    `\\mathbf f_1=h_t\\left(A_{ML}W^{[${activeJ}]}+b_{ML}(t_${activeJ})\\right)`,
+    `\\mathbf f_2=h_t\\left(A_{ML}\\left(W^{[${activeJ}]}+\\frac{\\mathbf f_1}{2}\\right)+b_{ML}\\left(t_${activeJ}+\\frac{h_t}{2}\\right)\\right)`,
+    `\\mathbf f_3=h_t\\left(A_{ML}\\left(W^{[${activeJ}]}+\\frac{\\mathbf f_2}{2}\\right)+b_{ML}\\left(t_${activeJ}+\\frac{h_t}{2}\\right)\\right)`,
+    `\\mathbf f_4=h_t\\left(A_{ML}\\left(W^{[${activeJ}]}+\\mathbf f_3\\right)+b_{ML}(t_${activeJ}+h_t)\\right)`,
   ]
   const activeMatrixProduct = multiplyMatrixVector(model.AML, stageStateVectors[activeK])
   const activeDerivativeVector = addVectors(activeMatrixProduct, stageBoundaryVectors[activeK])
@@ -323,7 +320,7 @@ export function MethodOfLinesRK4CalculationExample() {
               {!isComplete && (
                 <>
                   {' '}
-                  - next update computes <Katex math={`\\mathbf U^{${activeJ + 1}}`} />
+                  - next update computes <Katex math={`W^{[${activeJ + 1}]}`} />
                 </>
               )}
             </p>
@@ -468,37 +465,36 @@ export function MethodOfLinesRK4CalculationExample() {
       </div>
 
       <label className="block text-sm text-slate-700">
-        <span className="mb-1 block font-medium">Selected interior index: i = {activeI}</span>
+        <span className="mb-1 block font-medium">
+          Selected time step: <Katex math={`j=${activeJ}`} /> to <Katex math={`j+1=${activeJ + 1}`} />
+        </span>
         <input
           type="range"
-          min={1}
-          max={NS - 1}
-          value={activeI}
-          onChange={(event) => setSelectedI(Number(event.target.value))}
+          min={0}
+          max={Nt - 1}
+          value={activeJ}
+          onChange={(event) => {
+            setAnimationStep(Number(event.target.value))
+            setIsPlaying(false)
+          }}
           className="w-full"
         />
       </label>
 
       <div className="space-y-3">
-        <div className="grid gap-3 xl:grid-cols-3">
-          <div className="rounded-md bg-slate-50 px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">ODE system</p>
-            <Katex math="\frac{d\mathbf U}{dt}=A_{ML}\mathbf U+\mathbf b_{ML}(t)" display />
-          </div>
-
-          <div className="rounded-md bg-slate-50 px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Selected coefficients</p>
-            <Katex
-              math={`\\alpha_${activeI}^{ML}=${fmt(model.alpha[activeRow])},\\quad \\beta_${activeI}^{ML}=${fmt(model.beta[activeRow])},\\quad \\gamma_${activeI}^{ML}=${fmt(model.gamma[activeRow])}`}
-              display
-            />
-          </div>
-
-          <div className="rounded-md bg-slate-50 px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">RK4 stages for selected index</p>
-            <Katex math={`(\\mathbf f_1)_{${activeI}}=${fmt(activeStage.f1[activeRow])},\\quad (\\mathbf f_2)_{${activeI}}=${fmt(activeStage.f2[activeRow])}`} display />
-            <Katex math={`(\\mathbf f_3)_{${activeI}}=${fmt(activeStage.f3[activeRow])},\\quad (\\mathbf f_4)_{${activeI}}=${fmt(activeStage.f4[activeRow])}`} display />
-          </div>
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            ODE system at the selected time step
+          </p>
+          <Katex math="W'(t)=A_{ML}W(t)+b_{ML}(t)=F(t,W(t))" display />
+          <Katex
+            math={`W^{[${activeJ + 1}]}=W^{[${activeJ}]}+\\frac{\\mathbf f_1+2\\mathbf f_2+2\\mathbf f_3+\\mathbf f_4}{6}`}
+            display
+          />
+          <p className="text-center text-sm text-slate-600">
+            <Katex math="A_{ML}" /> is constant. The state vectors and
+            <Katex math="b_{ML}(t)" /> vary during the RK4 stages.
+          </p>
         </div>
 
         <div className="rounded-md bg-slate-50 px-4 py-3">
@@ -534,7 +530,14 @@ export function MethodOfLinesRK4CalculationExample() {
                 <Katex math="h_t" />
               </div>
               <div className="text-4xl font-light text-slate-500">(</div>
-              <MatrixTable title="A_ML matrix" values={model.AML} />
+              <MatrixTable
+                title={
+                  <>
+                    Matrix <Katex math="A_{ML}" />
+                  </>
+                }
+                values={model.AML}
+              />
               <div className="text-xl font-semibold text-slate-500">
                 <Katex math="\times" />
               </div>
@@ -575,36 +578,43 @@ export function MethodOfLinesRK4CalculationExample() {
           <div className="mt-4 border-t border-slate-200 pt-3">
             <div className="mb-2 [&_.katex-display]:my-0">
               <Katex
-                math={`\\mathbf U^{${activeJ + 1}}=\\mathbf U^{${activeJ}}+\\frac{\\mathbf f_1+2\\mathbf f_2+2\\mathbf f_3+\\mathbf f_4}{6}`}
+                math={`W^{[${activeJ + 1}]}=W^{[${activeJ}]}+\\frac{\\mathbf f_1+2\\mathbf f_2+2\\mathbf f_3+\\mathbf f_4}{6}`}
                 display
               />
             </div>
-            <div className="flex flex-wrap items-start gap-3">
+            <div className="flex items-start gap-3 overflow-x-auto pb-2">
               <div>
                 <div className="mb-1 text-center text-xs font-semibold text-slate-500">
-                  <Katex math={`\\mathbf U^{${activeJ}}`} />
+                  <Katex math={`W^{[${activeJ}]}`} />
                 </div>
                 <VectorMath values={activeStage.W} />
               </div>
-              <div className="pt-8 text-lg font-semibold text-slate-500">
-                <Katex math="\\to" />
-              </div>
+              {[activeStage.f1, activeStage.f2, activeStage.f3, activeStage.f4].map((values, index) => (
+                <div key={index} className="flex items-start gap-3">
+                  <div className="pt-8 text-lg font-semibold text-slate-500">+</div>
+                  <div>
+                    <div className="mb-1 text-center text-xs font-semibold text-slate-500">
+                      <Katex
+                        math={
+                          index === 0 || index === 3
+                            ? `\\mathbf f_${index + 1}/6`
+                            : `2\\mathbf f_${index + 1}/6`
+                        }
+                      />
+                    </div>
+                    <VectorMath values={scaleVector(values, index === 0 || index === 3 ? 1 / 6 : 1 / 3)} />
+                  </div>
+                </div>
+              ))}
+              <div className="pt-8 text-lg font-semibold text-slate-500">=</div>
               <div>
                 <div className="mb-1 text-center text-xs font-semibold text-slate-500">
-                  <Katex math={`\\mathbf U^{${activeJ + 1}}`} />
+                  <Katex math={`W^{[${activeJ + 1}]}`} />
                 </div>
                 <VectorMath values={activeStage.Wnext} />
               </div>
             </div>
           </div>
-        </div>
-
-        <div className="rounded-md bg-emerald-50 px-4 py-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">Updated value</p>
-          <Katex
-            math={`U_{${activeI},${activeJ + 1}}=U_{${activeI},${activeJ}}+\\frac{(\\mathbf f_1)_{${activeI}}+2(\\mathbf f_2)_{${activeI}}+2(\\mathbf f_3)_{${activeI}}+(\\mathbf f_4)_{${activeI}}}{6}=${fmt(activeStage.Wnext[activeRow])}`}
-            display
-          />
         </div>
       </div>
     </div>

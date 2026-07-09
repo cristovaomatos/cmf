@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
-import { europeanParams } from '../../data/parameters'
+import { crankNicolsonSimulationDefaults } from '../../data/parameters'
 import { Katex } from '../Math/Katex'
 import { SurfacePlot } from './SurfacePlot'
 
@@ -116,6 +116,40 @@ function MatrixTable({ title, values }: { title: string; values: number[][] }) {
   )
 }
 
+function VectorTable({
+  title,
+  values,
+  tone = 'slate',
+}: {
+  title: ReactNode
+  values: number[]
+  tone?: 'slate' | 'blue' | 'amber' | 'emerald'
+}) {
+  const toneClass = {
+    slate: 'bg-white',
+    blue: 'bg-blue-50',
+    amber: 'bg-amber-50',
+    emerald: 'bg-emerald-50',
+  }[tone]
+
+  return (
+    <div className="min-w-28">
+      <p className="mb-1 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <table className="mx-auto text-right text-xs text-slate-700">
+        <tbody>
+          {values.map((value, index) => (
+            <tr key={index}>
+              <td className={`min-w-24 border border-slate-200 px-3 py-1 font-mono ${toneClass}`}>
+                {Math.abs(value) < 0.00005 ? '0' : fmt(value, 4)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function CalculationBox({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="rounded-md border border-slate-200 bg-white px-4 py-3">
@@ -127,17 +161,17 @@ function CalculationBox({ title, children }: { title: string; children: ReactNod
 
 export function CrankNicolsonCalculationExample() {
   const [optionType, setOptionType] = useState<OptionType>('put')
-  const [NS, setNS] = useState(10)
-  const [Nt, setNt] = useState(10)
-  const [r, setR] = useState(europeanParams.r)
-  const [sigma, setSigma] = useState(europeanParams.sigma)
+  const [NS, setNS] = useState(crankNicolsonSimulationDefaults.NS)
+  const [Nt, setNt] = useState(crankNicolsonSimulationDefaults.Nt)
+  const [r, setR] = useState(crankNicolsonSimulationDefaults.r)
+  const [sigma, setSigma] = useState(crankNicolsonSimulationDefaults.sigma)
   const [selectedI, setSelectedI] = useState(4)
   const [animationStep, setAnimationStep] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [surfaceMode, setSurfaceMode] = useState<'U' | 'V'>('U')
 
   const model = useMemo(() => {
-    const { T, K, Smax } = europeanParams
+    const { T, K, Smax } = crankNicolsonSimulationDefaults
     const hS = Smax / NS
     const ht = T / Nt
     const n = NS - 1
@@ -170,18 +204,22 @@ export function CrankNicolsonCalculationExample() {
 
     const U: number[][] = [S.map((value) => payoff(value, K, optionType))]
     const rhsByStep: number[][] = []
+    const qByStep: number[][] = []
     const boundaryByStep: Array<{ previousLeft: number; previousRight: number; nextLeft: number; nextRight: number }> = []
 
     for (let j = 0; j < Nt; j += 1) {
       const previousRow = U[j]
       const previousInterior = previousRow.slice(1, NS)
       const rhs = multiplyMatrixVector(B, previousInterior)
+      const q = Array.from({ length: n }, () => 0)
       const nextLeft = leftBoundary(tau[j + 1], K, r, optionType)
       const nextRight = rightBoundary(Smax, tau[j + 1], K, r, optionType)
 
-      rhs[0] -= a[0] * (nextLeft + previousRow[0])
-      rhs[n - 1] -= c[n - 1] * (nextRight + previousRow[NS])
+      q[0] = -a[0] * (nextLeft + previousRow[0])
+      q[n - 1] = -c[n - 1] * (nextRight + previousRow[NS])
+      for (let row = 0; row < n; row += 1) rhs[row] += q[row]
       rhsByStep.push([...rhs])
+      qByStep.push(q)
       boundaryByStep.push({
         previousLeft: previousRow[0],
         previousRight: previousRow[NS],
@@ -195,7 +233,7 @@ export function CrankNicolsonCalculationExample() {
 
     const surfaceValues = S.map((_, i) => U.map((row) => row[i]))
 
-    return { A, B, K, S, U, a, b, boundaryByStep, c, d, hS, ht, rhsByStep, surfaceValues, tau }
+    return { A, B, K, S, U, a, b, boundaryByStep, c, d, hS, ht, qByStep, rhsByStep, surfaceValues, tau }
   }, [NS, Nt, optionType, r, sigma])
 
   const totalSteps = Nt
@@ -206,6 +244,9 @@ export function CrankNicolsonCalculationExample() {
   const activeBoundary = model.boundaryByStep[activeJ]
   const previousRow = model.U[activeJ]
   const nextRow = model.U[activeJ + 1]
+  const previousInterior = previousRow.slice(1, NS)
+  const nextInterior = nextRow.slice(1, NS)
+  const matrixProduct = multiplyMatrixVector(model.B, previousInterior)
   const activeCoeff = {
     a: model.a[activeRow],
     b: model.b[activeRow],
@@ -752,65 +793,81 @@ export function CrankNicolsonCalculationExample() {
       </div>
 
       <label className="block text-sm text-slate-700">
-        <span className="mb-1 block font-medium">Selected interior index: i = {activeI}</span>
+        <span className="mb-1 block font-medium">
+          Selected time step: <Katex math={`j=${activeJ}`} /> to <Katex math={`j+1=${activeJ + 1}`} />
+        </span>
         <input
           type="range"
-          min={1}
-          max={NS - 1}
-          value={activeI}
-          onChange={(event) => setSelectedI(Number(event.target.value))}
+          min={0}
+          max={Nt - 1}
+          value={activeJ}
+          onChange={(event) => {
+            setAnimationStep(Number(event.target.value))
+            setIsPlaying(false)
+          }}
           className="w-full"
         />
       </label>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <div className="space-y-3">
-          <div className="rounded-md bg-slate-50 px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Current system</p>
-            <Katex
-              math={`A_{CN}\\mathbf U^{${activeJ + 1}}=B_{CN}\\mathbf U^{${activeJ}}+\\mathbf q_{CN}^{${activeJ},${activeJ + 1}}`}
-              display
-            />
-          </div>
+      <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">System at the selected time step</p>
+        <Katex
+          math={`A_{CN}\\mathbf U^{${activeJ + 1}}=B_{CN}\\mathbf U^{${activeJ}}+\\mathbf q_{CN}^{${activeJ},${activeJ + 1}}`}
+          display
+        />
+        <p className="text-center text-sm text-slate-600">
+          <Katex math="A_{CN}" /> and <Katex math="B_{CN}" /> are constant; only the state and boundary vector
+          change with <Katex math="j" />.
+        </p>
+      </div>
 
-          <div className="rounded-md bg-slate-50 px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Selected row coefficients</p>
-            <Katex
-              math={`a_${activeI}=${fmt(model.a[activeRow])},\\quad b_${activeI}=${fmt(model.b[activeRow])},\\quad c_${activeI}=${fmt(model.c[activeRow])},\\quad d_${activeI}=${fmt(model.d[activeRow])}`}
-              display
-            />
-          </div>
+      <div className="grid gap-5 xl:grid-cols-2">
+        <MatrixTable title="Full A_CN matrix" values={model.A} />
+        <MatrixTable title="Full B_CN matrix" values={model.B} />
+      </div>
 
-          <div className="rounded-md bg-slate-50 px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Boundary terms</p>
-            <Katex
-              math={`U_{0,${activeJ}}=${fmt(model.boundaryByStep[activeJ]?.previousLeft ?? 0)},\\quad U_{0,${activeJ + 1}}=${fmt(model.boundaryByStep[activeJ]?.nextLeft ?? 0)}`}
-              display
-            />
-            <Katex
-              math={`U_{N_S,${activeJ}}=${fmt(model.boundaryByStep[activeJ]?.previousRight ?? 0)},\\quad U_{N_S,${activeJ + 1}}=${fmt(model.boundaryByStep[activeJ]?.nextRight ?? 0)}`}
-              display
-            />
-          </div>
-
-          <div className="rounded-md bg-slate-50 px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Selected equation</p>
-            <Katex
-              math={`a_${activeI}U_{${activeI - 1},${activeJ + 1}}+b_${activeI}U_{${activeI},${activeJ + 1}}+c_${activeI}U_{${activeI + 1},${activeJ + 1}}=\\mathrm{rhs}_${activeI}^{(${activeJ})}`}
-              display
-            />
-            <Katex math={`\\mathrm{rhs}_${activeI}^{(${activeJ})}=${fmt(model.rhsByStep[activeJ][activeRow])}`} display />
-          </div>
-
-          <div className="rounded-md bg-emerald-50 px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">Solved cell</p>
-            <Katex math={`U_{${activeI},${activeJ + 1}}=${fmt(model.U[activeJ + 1][activeI])}`} display />
-          </div>
+      <div className="rounded-md border border-slate-200 bg-white px-4 py-4">
+        <div className="mb-4">
+          <p className="text-sm font-semibold text-slate-900">Full vector calculation</p>
+          <p className="text-sm text-slate-600">
+            The first and last entries of <Katex math={`\\mathbf q_{CN}^{${activeJ},${activeJ + 1}}`} /> contain
+            the possible boundary contributions for this step; all interior entries are zero.
+          </p>
         </div>
 
-        <div className="grid gap-4">
-          <MatrixTable title="Full A_CN matrix" values={model.A} />
-          <MatrixTable title="Full B_CN matrix" values={model.B} />
+        <div className="flex items-center gap-3 overflow-x-auto pb-2">
+          <VectorTable title={<Katex math={`\\mathbf U^{${activeJ}}`} />} values={previousInterior} tone="blue" />
+          <span className="shrink-0 text-xl text-slate-400">→</span>
+          <VectorTable
+            title={<Katex math={`B_{CN}\\mathbf U^{${activeJ}}`} />}
+            values={matrixProduct}
+            tone="slate"
+          />
+          <span className="shrink-0 text-xl font-semibold text-slate-500">+</span>
+          <VectorTable
+            title={<Katex math={`\\mathbf q_{CN}^{${activeJ},${activeJ + 1}}`} />}
+            values={model.qByStep[activeJ]}
+            tone="amber"
+          />
+          <span className="shrink-0 text-xl font-semibold text-slate-500">=</span>
+          <VectorTable
+            title={<Katex math={`\\mathrm{rhs}^{(${activeJ})}`} />}
+            values={model.rhsByStep[activeJ]}
+            tone="slate"
+          />
+          <span className="shrink-0 text-xl text-slate-400">→</span>
+          <VectorTable
+            title={<Katex math={`\\mathbf U^{${activeJ + 1}}`} />}
+            values={nextInterior}
+            tone="emerald"
+          />
+        </div>
+
+        <div className="mt-3 border-t border-slate-200 pt-3 text-sm text-slate-600">
+          <Katex
+            math={`\\mathbf q_{CN}^{${activeJ},${activeJ + 1}}=\\left(-a_1(U_{0,${activeJ + 1}}+U_{0,${activeJ}}),\\ 0,\\ldots,0,\\ -c_{N_S-1}(U_{N_S,${activeJ + 1}}+U_{N_S,${activeJ}})\\right)^T`}
+            display
+          />
         </div>
       </div>
     </div>

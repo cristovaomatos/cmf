@@ -22,4 +22,14 @@ export const americanParams = {
   max_iter: 10000,
 }
 
+export const crankNicolsonSimulationDefaults = {
+  r: 0.06,
+  sigma: 0.3,
+  T: 1,
+  K: 10,
+  Smax: 15,
+  NS: 10,
+  Nt: 10,
+}
+
 export const profileTimes = [0, 0.5, 1]

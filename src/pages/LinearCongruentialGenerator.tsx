@@ -4,10 +4,8 @@ import { PageLayout } from '../components/Layout/PageLayout'
 import { EquationBlock, InlineEquation } from '../components/Math/EquationBlock'
 import { Katex } from '../components/Math/Katex'
 import { lcgSnippets, randu01Snippets } from '../data/matlabSnippets'
+import { lcg, matlabModulo, PARK_MILLER_A, PARK_MILLER_B, PARK_MILLER_M } from '../utils/lcg'
 
-const PARK_MILLER_M = 2 ** 31 - 1
-const PARK_MILLER_A = 16807
-const PARK_MILLER_B = 0
 const DEFAULT_SAMPLE_SIZES = [1000, 10000, 100000]
 const STEP_COUNT = 8
 const MAX_SAMPLE_SIZE = 1000000
@@ -20,32 +18,13 @@ function formatInteger(value: number) {
   return new Intl.NumberFormat('en-US').format(value)
 }
 
-function lcgSamples(N: number, seed: number, A = PARK_MILLER_A, B = PARK_MILLER_B, M = PARK_MILLER_M) {
-  const samples = new Array<number>(N)
-  let m = seed % M
-  if (m <= 0) m += M - 1
-
-  for (let i = 0; i < N; i += 1) {
-    m = (A * m + B) % M
-    samples[i] = m / M
-  }
-
-  return samples
-}
-
-function normaliseSeed(seed: number, M = PARK_MILLER_M) {
-  let value = Math.trunc(seed) % M
-  if (value <= 0) value += M - 1
-  return value
-}
-
 function lcgSteps(count: number, seed: number, A = PARK_MILLER_A, B = PARK_MILLER_B, M = PARK_MILLER_M) {
   const rows: Array<{ i: number; previous: number; raw: number; residue: number; x: number }> = []
-  let previous = normaliseSeed(seed, M)
+  let previous = seed
 
   for (let i = 1; i <= count; i += 1) {
     const raw = A * previous + B
-    const residue = raw % M
+    const residue = matlabModulo(raw, M)
     rows.push({ i, previous, raw, residue, x: residue / M })
     previous = residue
   }
@@ -248,7 +227,7 @@ export default function LinearCongruentialGenerator() {
 
   const safeSampleSizes = sampleSizes.map((N) => Math.min(MAX_SAMPLE_SIZE, Math.max(10, Math.trunc(N || 10))))
   const maxN = Math.max(...safeSampleSizes)
-  const samples = useMemo(() => lcgSamples(maxN, seed), [maxN, seed])
+  const samples = useMemo(() => lcg(maxN, seed), [maxN, seed])
   const stepRows = useMemo(() => lcgSteps(STEP_COUNT, seed), [seed])
   const tableRows = useMemo(
     () =>
@@ -359,7 +338,7 @@ export default function LinearCongruentialGenerator() {
           </label>
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Normalised seed used in the recurrence</p>
-            <p className="mt-1 font-mono text-lg font-semibold text-slate-900">{formatInteger(normaliseSeed(seed))}</p>
+            <p className="mt-1 font-mono text-lg font-semibold text-slate-900">{formatInteger(seed)}</p>
           </div>
         </div>
 

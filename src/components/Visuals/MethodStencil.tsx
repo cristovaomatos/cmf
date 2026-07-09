@@ -54,10 +54,17 @@ export function MethodStencil({ method }: { method: 'explicit' | 'implicit' | 'm
         <circle cx={midX} cy={rowY} r={7} className="fill-blue-600" />
         <circle cx={rightX} cy={rowY} r={7} className="fill-blue-600" />
         <circle cx={midX} cy={derivativeY} r={7} className="fill-emerald-500" />
-        <StencilLabel x={leftX} y={rowY + 30} latex="U_{i-1}(t)" />
-        <StencilLabel x={midX} y={rowY + 30} latex="U_i(t)" bold />
-        <StencilLabel x={rightX} y={rowY + 30} latex="U_{i+1}(t)" />
-        <StencilLabel x={midX} y={derivativeY - 30} latex="\frac{dU_i}{dt}(t)" bold tone="emerald" width={130} />
+        <StencilLabel x={leftX} y={rowY + 30} latex="U(S_{i-1},t)" />
+        <StencilLabel x={midX} y={rowY + 30} latex="U(S_i,t)" bold />
+        <StencilLabel x={rightX} y={rowY + 30} latex="U(S_{i+1},t)" />
+        <StencilLabel
+          x={midX}
+          y={derivativeY - 30}
+          latex="\frac{\partial U}{\partial t}(S_i,t)"
+          bold
+          tone="emerald"
+          width={150}
+        />
       </svg>
     )
   }
@@ -78,15 +85,15 @@ export function MethodStencil({ method }: { method: 'explicit' | 'implicit' | 'm
         <StencilLabel x={centerX} y={18} latex="t" bold width={40} />
         <StencilLabel x={104} y={bottomY + 18} latex="t_j" width={70} />
         <StencilLabel x={112} y={topY - 20} latex="t_{j+1}=t_j+h_t" width={150} />
-        <StencilLabel x={centerX + 52} y={bottomY + 28} latex="\mathbf U^j" bold tone="blue" />
-        <StencilLabel x={centerX + 68} y={topY + 24} latex="\mathbf U^{j+1}" bold tone="emerald" width={120} />
+        <StencilLabel x={centerX + 52} y={bottomY + 28} latex="W^{[j]}" bold tone="blue" />
+        <StencilLabel x={centerX + 68} y={topY + 24} latex="W^{[j+1]}" bold tone="emerald" width={120} />
 
         <foreignObject x={112} y={98} width={285} height={78}>
           <div className="flex h-full flex-col items-center justify-center rounded border border-amber-200 bg-amber-50/70 px-2 text-xs text-slate-700">
             <span className="font-medium text-amber-700">RK4 internal stages</span>
-            <Katex math="\mathbf k_1,\mathbf k_2,\mathbf k_3,\mathbf k_4" />
+            <Katex math="\mathbf f_1,\mathbf f_2,\mathbf f_3,\mathbf f_4" />
             <span className="mt-1">estimate the average slope</span>
-            <Katex math="\frac{1}{6}(\mathbf k_1+2\mathbf k_2+2\mathbf k_3+\mathbf k_4)" />
+            <Katex math="\frac{1}{6}(\mathbf f_1+2\mathbf f_2+2\mathbf f_3+\mathbf f_4)" />
           </div>
         </foreignObject>
       </svg>

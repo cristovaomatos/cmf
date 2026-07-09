@@ -4,10 +4,8 @@ import { PageLayout } from '../components/Layout/PageLayout'
 import { EquationBlock, InlineEquation } from '../components/Math/EquationBlock'
 import { Katex } from '../components/Math/Katex'
 import { haltonNodesSnippets } from '../data/matlabSnippets'
+import { lcg } from '../utils/lcg'
 
-const PARK_MILLER_M = 2 ** 31 - 1
-const PARK_MILLER_A = 16807
-const PARK_MILLER_B = 0
 const DEFAULT_NODE_COUNT = 1000
 const MAX_NODE_COUNT = 5000
 const STEP_COUNT = 12
@@ -31,20 +29,6 @@ function fmt(value: number, digits = 6) {
 
 function formatInteger(value: number) {
   return new Intl.NumberFormat('en-US').format(value)
-}
-
-function normaliseSeed(seed: number, M = PARK_MILLER_M) {
-  let value = Math.trunc(seed) % M
-  if (value <= 0) value += M - 1
-  return value
-}
-
-function createLcg(seed: number) {
-  let state = normaliseSeed(seed)
-  return () => {
-    state = (PARK_MILLER_A * state + PARK_MILLER_B) % PARK_MILLER_M
-    return state / PARK_MILLER_M
-  }
 }
 
 function digitsInBase(n: number, base: number) {
@@ -99,10 +83,11 @@ function haltonNodes(count: number) {
 }
 
 function uniformNodes(count: number, seed: number) {
-  const nextUniform = createLcg(seed)
-  return Array.from({ length: count }, () => ({
-    x: nextUniform(),
-    y: nextUniform(),
+  const xValues = lcg(count, seed)
+  const yValues = lcg(count, seed + 1)
+  return Array.from({ length: count }, (_, index) => ({
+    x: xValues[index],
+    y: yValues[index],
   }))
 }
 

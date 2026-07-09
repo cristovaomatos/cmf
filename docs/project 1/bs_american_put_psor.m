@@ -53,8 +53,8 @@ function [S, tau, U, Sf] = bs_american_put_psor(r, sigma, T, K, Smax, NS, Nt, om
         rhs = B * U(2:NS, n);
     
         % boundary contributions
-        rhs(1)   = rhs(1)   - a(1)   * U(1, n+1)   + a(1)   * U(1, n);
-        rhs(end) = rhs(end) - c(end) * U(end, n+1) + c(end) * U(end, n);
+        rhs(1)   = rhs(1)   - a(1)   * (U(1, n+1)   + U(1, n));
+        rhs(end) = rhs(end) - c(end) * (U(end, n+1) + U(end, n));
     
         % complementarity formulation from the notes:
         % x = w - g >= 0, with btilde = rhs - A*g

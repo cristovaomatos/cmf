@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react'
 import { PageLayout } from '../components/Layout/PageLayout'
 import { EquationBlock, InlineEquation } from '../components/Math/EquationBlock'
+import { createLcg } from '../utils/lcg'
 
-const PARK_MILLER_M = 2 ** 31 - 1
-const PARK_MILLER_A = 16807
 const S0 = 10
 const T = 1
 const MU = 0.6
@@ -42,20 +41,6 @@ function sci(value: number) {
 
 function formatInteger(value: number) {
   return new Intl.NumberFormat('en-US').format(value)
-}
-
-function normaliseSeed(seed: number, M = PARK_MILLER_M) {
-  let value = Math.trunc(seed) % M
-  if (value <= 0) value += M - 1
-  return value
-}
-
-function createLcg(seed: number) {
-  let state = normaliseSeed(seed)
-  return () => {
-    state = (PARK_MILLER_A * state) % PARK_MILLER_M
-    return state / PARK_MILLER_M
-  }
 }
 
 function createNormal(seed: number) {

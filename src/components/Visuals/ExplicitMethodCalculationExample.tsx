@@ -419,6 +419,59 @@ export function ExplicitMethodCalculationExample() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <div className="space-y-3">
+          <div className="rounded-md bg-blue-50 px-4 py-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-700">
+              Initial condition
+            </p>
+            <Katex
+              math={`S_${activeI}=${activeI}h_S=${activeI}\\cdot ${fmt(model.hS, 3)}
+                =${fmt(model.S[activeI], 3)}`}
+              display
+            />
+            <Katex
+              math={
+                optionType === 'put'
+                  ? `U_{${activeI},0}=u_0(S_${activeI})=\\max(K-S_${activeI},0)
+                    =\\max(${fmt(model.K, 2)}-${fmt(model.S[activeI], 3)},0)
+                    =${fmt(model.U[0][activeI])}`
+                  : `U_{${activeI},0}=u_0(S_${activeI})=\\max(S_${activeI}-K,0)
+                    =\\max(${fmt(model.S[activeI], 3)}-${fmt(model.K, 2)},0)
+                    =${fmt(model.U[0][activeI])}`
+              }
+              display
+            />
+          </div>
+
+          <div className="rounded-md bg-red-50 px-4 py-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-red-700">
+              Left boundary condition
+            </p>
+            <Katex
+              math={`t_${activeJ}=${activeJ}h_t=${activeJ}\\cdot ${fmt(model.ht, 4)}=${fmt(model.tau[activeJ], 4)}`}
+              display
+            />
+            <Katex
+              math={
+                optionType === 'put'
+                  ? `U_{0,${activeJ}}=u_a(t_${activeJ})=Ke^{-rt_${activeJ}}
+                    =${fmt(model.K, 2)}e^{-${fmt(r, 3)}\\cdot ${fmt(model.tau[activeJ], 4)}}
+                    =${fmt(model.U[activeJ][0])}`
+                  : `U_{0,${activeJ}}=u_a(t_${activeJ})=0`
+              }
+              display
+            />
+            <Katex
+              math={
+                optionType === 'put'
+                  ? `U_{0,${activeJ + 1}}=u_a(t_${activeJ + 1})=Ke^{-rt_${activeJ + 1}}
+                    =${fmt(model.K, 2)}e^{-${fmt(r, 3)}\\cdot ${fmt(model.tau[activeJ + 1], 4)}}
+                    =${fmt(model.U[activeJ + 1][0])}`
+                  : `U_{0,${activeJ + 1}}=u_a(t_${activeJ + 1})=0`
+              }
+              display
+            />
+          </div>
+
           <div className="rounded-md bg-slate-50 px-4 py-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Selected weights</p>
             <Katex

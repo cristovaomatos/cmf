@@ -4,10 +4,8 @@ import { PageLayout } from '../components/Layout/PageLayout'
 import { EquationBlock, InlineEquation } from '../components/Math/EquationBlock'
 import { Katex } from '../components/Math/Katex'
 import { randnArSnippets } from '../data/matlabSnippets'
+import { lcg } from '../utils/lcg'
 
-const PARK_MILLER_M = 2 ** 31 - 1
-const PARK_MILLER_A = 16807
-const PARK_MILLER_B = 0
 const ENVELOPE_M = Math.sqrt((2 * Math.PI) / Math.E)
 const THEORETICAL_ACCEPTANCE = 1 / ENVELOPE_M
 const DEFAULT_SAMPLE_SIZES = [500, 5000, 50000]
@@ -37,20 +35,6 @@ function formatInteger(value: number) {
   return new Intl.NumberFormat('en-US').format(value)
 }
 
-function normaliseSeed(seed: number, M = PARK_MILLER_M) {
-  let value = Math.trunc(seed) % M
-  if (value <= 0) value += M - 1
-  return value
-}
-
-function createLcg(seed: number) {
-  let state = normaliseSeed(seed)
-  return () => {
-    state = (PARK_MILLER_A * state + PARK_MILLER_B) % PARK_MILLER_M
-    return state / PARK_MILLER_M
-  }
-}
-
 function normalDensity(x: number) {
   return Math.exp(-(x ** 2) / 2) / Math.sqrt(2 * Math.PI)
 }
@@ -72,13 +56,14 @@ function cauchyCandidate(u0: number) {
 }
 
 function proposalSteps(count: number, seed: number): ProposalStep[] {
-  const nextUniform = createLcg(seed)
+  const u0Values = lcg(count, seed)
+  const u1Values = lcg(count, seed + 1)
   const rows: ProposalStep[] = []
   let acceptedCount = 0
 
   for (let attempt = 1; attempt <= count; attempt += 1) {
-    const u0 = nextUniform()
-    const u1 = nextUniform()
+    const u0 = u0Values[attempt - 1]
+    const u1 = u1Values[attempt - 1]
     const y = cauchyCandidate(u0)
     const targetDensity = normalDensity(y)
     const proposalEnvelope = envelopeDensity(y)
@@ -102,24 +87,35 @@ function proposalSteps(count: number, seed: number): ProposalStep[] {
 }
 
 function normalSamplesByAcceptanceRejection(targetCount: number, seed: number) {
-  const nextUniform = createLcg(seed)
   const samples: number[] = []
-  const proposalAtAcceptance: number[] = []
   let proposals = 0
-  const maxProposals = Math.max(1000, targetCount * 20)
+  let acceptedProposals = 0
+  let batch = 0
 
-  while (samples.length < targetCount && proposals < maxProposals) {
-    proposals += 1
-    const u0 = nextUniform()
-    const u1 = nextUniform()
-    const y = cauchyCandidate(u0)
-    if (u1 <= acceptanceRatio(y)) {
-      samples.push(y)
-      proposalAtAcceptance.push(proposals)
+  while (samples.length < targetCount) {
+    const batchSize = Math.ceil(1.8 * (targetCount - samples.length))
+    const u0Values = lcg(batchSize, seed + 2 * batch)
+    const u1Values = lcg(batchSize, seed + 2 * batch + 1)
+    const acceptedBatch: number[] = []
+    proposals += batchSize
+
+    for (let index = 0; index < batchSize; index += 1) {
+      const y = cauchyCandidate(u0Values[index])
+      if (u1Values[index] <= acceptanceRatio(y)) {
+        acceptedBatch.push(y)
+      }
     }
+
+    acceptedProposals += acceptedBatch.length
+    const remaining = targetCount - samples.length
+    const valuesToKeep = Math.min(acceptedBatch.length, remaining)
+    for (let index = 0; index < valuesToKeep; index += 1) {
+      samples.push(acceptedBatch[index])
+    }
+    batch += 1
   }
 
-  return { samples, proposalAtAcceptance, proposals }
+  return { samples, proposals, acceptedProposals }
 }
 
 function sampleMean(values: number[]) {
@@ -131,7 +127,7 @@ function sampleVariance(values: number[], mean = sampleMean(values)) {
   return values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1)
 }
 
-function normalHistogram(values: number[], binCount = 48) {
+function normalHistogram(values: number[], binCount = 80) {
   const counts = Array.from({ length: binCount }, () => 0)
   const width = HISTOGRAM_MAX - HISTOGRAM_MIN
   const binWidth = width / binCount
@@ -208,8 +204,8 @@ function ProposalStepsTable({ rows }: { rows: ProposalStep[] }) {
           {rows.map((row) => (
             <tr key={row.attempt}>
               <td className="border border-slate-200 px-2 py-1 text-left font-mono">{row.attempt}</td>
-              <td className="border border-slate-200 px-2 py-1 font-mono">{fmt(row.u0, 4)}</td>
-              <td className="border border-slate-200 px-2 py-1 font-mono">{fmt(row.u1, 4)}</td>
+              <td className="border border-slate-200 px-2 py-1 font-mono">{fmt(row.u0, 6)}</td>
+              <td className="border border-slate-200 px-2 py-1 font-mono">{fmt(row.u1, 6)}</td>
               <td className="border border-slate-200 px-2 py-1 font-mono">{fmt(row.y, 4)}</td>
               <td className="border border-slate-200 px-2 py-1 font-mono">{fmt(row.targetDensity, 5)}</td>
               <td className="border border-slate-200 px-2 py-1 font-mono">{fmt(row.envelopeDensity, 5)}</td>
@@ -260,6 +256,7 @@ function AcceptedValuesPreview({ rows }: { rows: ProposalStep[] }) {
 }
 
 function EnvelopePlot({ rows }: { rows: ProposalStep[] }) {
+  const [activeAttempt, setActiveAttempt] = useState<number | null>(null)
   const width = 680
   const height = 320
   const margin = { top: 24, right: 24, bottom: 42, left: 48 }
@@ -267,23 +264,38 @@ function EnvelopePlot({ rows }: { rows: ProposalStep[] }) {
   const plotHeight = height - margin.top - margin.bottom
   const xMin = -5
   const xMax = 5
+  const visibleRows = rows.filter((row) => row.y >= xMin && row.y <= xMax)
+  const omittedCount = rows.length - visibleRows.length
   const yMax = 0.55
   const x = (value: number) => margin.left + ((value - xMin) / (xMax - xMin)) * plotWidth
   const y = (value: number) => margin.top + (1 - value / yMax) * plotHeight
   const curvePoints = Array.from({ length: 201 }, (_, index) => xMin + (index / 200) * (xMax - xMin))
   const path = (fn: (value: number) => number) =>
     curvePoints.map((value, index) => `${index === 0 ? 'M' : 'L'} ${x(value)} ${y(fn(value))}`).join(' ')
+  const xTicks = [-4, -2, 0, 2, 4]
+  const activeRow = visibleRows.find((row) => row.attempt === activeAttempt) ?? null
+  const activePointHeight = activeRow ? activeRow.u1 * activeRow.envelopeDensity : 0
+  const tooltipWidth = 212
+  const tooltipHeight = 116
+  const tooltipX = activeRow
+    ? Math.min(width - margin.right - tooltipWidth, Math.max(margin.left, x(activeRow.y) - tooltipWidth / 2))
+    : 0
+  const tooltipY = activeRow
+    ? y(activePointHeight) - tooltipHeight - 10 >= margin.top
+      ? y(activePointHeight) - tooltipHeight - 10
+      : y(activePointHeight) + 10
+    : 0
 
   return (
     <figure className="rounded-md border border-slate-200 bg-white px-3 py-3">
       <svg viewBox={`0 0 ${width} ${height}`} className="h-auto w-full" role="img" aria-label="Acceptance-rejection envelope">
         <line x1={margin.left} y1={margin.top} x2={margin.left} y2={height - margin.bottom} className="stroke-slate-700" />
         <line x1={margin.left} y1={height - margin.bottom} x2={width - margin.right} y2={height - margin.bottom} className="stroke-slate-700" />
-        {[-4, -2, 0, 2, 4].map((tick) => (
-          <g key={tick}>
+        {xTicks.map((tick, index) => (
+          <g key={index}>
             <line x1={x(tick)} y1={height - margin.bottom} x2={x(tick)} y2={height - margin.bottom + 5} className="stroke-slate-500" />
             <text x={x(tick)} y={height - 18} textAnchor="middle" className="fill-slate-600 text-xs">
-              {tick}
+              {Math.abs(tick) >= 10 ? tick.toFixed(0) : tick.toFixed(1)}
             </text>
           </g>
         ))}
@@ -297,20 +309,68 @@ function EnvelopePlot({ rows }: { rows: ProposalStep[] }) {
         ))}
         <path d={path(envelopeDensity)} fill="none" className="stroke-blue-600" strokeWidth={2.5} />
         <path d={path(normalDensity)} fill="none" className="stroke-rose-600" strokeWidth={2.5} />
-        {rows
-          .filter((row) => row.y >= xMin && row.y <= xMax)
-          .map((row) => {
-            const pointHeight = row.u1 * row.envelopeDensity
-            return (
+        {visibleRows.map((row) => {
+          const pointHeight = row.u1 * row.envelopeDensity
+          const isActive = activeAttempt === row.attempt
+          const pointLabel = [
+            `Attempt ${row.attempt}`,
+            `y = ${fmt(row.y, 6)}`,
+            `u1 = ${fmt(row.u1, 6)}`,
+            `u1 M g(y) = ${fmt(pointHeight, 6)}`,
+            `f(y) = ${fmt(row.targetDensity, 6)}`,
+            row.accepted ? `accepted as z_${row.acceptedIndex}` : 'rejected',
+          ].join(', ')
+
+          return (
+            <g key={row.attempt}>
               <circle
-                key={row.attempt}
                 cx={x(row.y)}
                 cy={y(pointHeight)}
-                r={5}
+                r={isActive ? 7 : 5}
                 className={row.accepted ? 'fill-emerald-500 stroke-emerald-700' : 'fill-slate-300 stroke-slate-500'}
+                strokeWidth={isActive ? 2.5 : 1.5}
+                tabIndex={0}
+                role="img"
+                aria-label={pointLabel}
+                onMouseEnter={() => setActiveAttempt(row.attempt)}
+                onMouseLeave={() => setActiveAttempt(null)}
+                onFocus={() => setActiveAttempt(row.attempt)}
+                onBlur={() => setActiveAttempt(null)}
               />
-            )
-          })}
+              <title>{pointLabel}</title>
+            </g>
+          )
+        })}
+        {activeRow && (
+          <g className="pointer-events-none">
+            <rect
+              x={tooltipX}
+              y={tooltipY}
+              width={tooltipWidth}
+              height={tooltipHeight}
+              rx={4}
+              className="fill-slate-900/95 stroke-white"
+            />
+            <text x={tooltipX + 10} y={tooltipY + 18} className="fill-white text-xs font-semibold">
+              Attempt {activeRow.attempt}: {activeRow.accepted ? `accept z_${activeRow.acceptedIndex}` : 'reject'}
+            </text>
+            <text x={tooltipX + 10} y={tooltipY + 38} className="fill-slate-100 text-xs">
+              y = {fmt(activeRow.y, 6)}
+            </text>
+            <text x={tooltipX + 10} y={tooltipY + 56} className="fill-slate-100 text-xs">
+              u₁ = {fmt(activeRow.u1, 6)}
+            </text>
+            <text x={tooltipX + 10} y={tooltipY + 74} className="fill-slate-100 text-xs">
+              u₁ M g(y) = {fmt(activePointHeight, 6)}
+            </text>
+            <text x={tooltipX + 10} y={tooltipY + 92} className="fill-slate-100 text-xs">
+              f(y) = {fmt(activeRow.targetDensity, 6)}
+            </text>
+            <text x={tooltipX + 10} y={tooltipY + 108} className="fill-slate-300 text-[10px]">
+              p(y) = {fmt(activeRow.acceptanceRatio, 6)}
+            </text>
+          </g>
+        )}
         <text x={width - margin.right} y={margin.top + 16} textAnchor="end" className="fill-blue-700 text-xs font-semibold">
           M g(y)
         </text>
@@ -325,7 +385,11 @@ function EnvelopePlot({ rows }: { rows: ProposalStep[] }) {
         </text>
       </svg>
       <figcaption className="mt-2 text-xs text-slate-600">
-        Green points are accepted because they fall below the target density. Grey points are rejected.
+        The plot shows the proposals from the table that lie in the central window
+        <InlineEquation latex="-5\leq y\leq5" />. Green points are accepted because they fall below the target
+        density; grey points are rejected. Hover over or focus a point to inspect its result.
+        {omittedCount > 0 &&
+          ` ${omittedCount} extreme ${omittedCount === 1 ? 'proposal is' : 'proposals are'} omitted from the plot but retained in the table.`}
       </figcaption>
     </figure>
   )
@@ -405,27 +469,31 @@ export default function AcceptanceRejectionMethod() {
   const [sampleSizes, setSampleSizes] = useState(DEFAULT_SAMPLE_SIZES)
 
   const safeSampleSizes = sampleSizes.map((N) => Math.min(MAX_SAMPLE_SIZE, Math.max(50, Math.trunc(N || 50))))
-  const maxN = Math.max(...safeSampleSizes)
+  const sampleSizeKey = safeSampleSizes.join(',')
   const stepRows = useMemo(() => proposalSteps(STEP_COUNT, seed), [seed])
-  const generated = useMemo(() => normalSamplesByAcceptanceRejection(maxN, seed), [maxN, seed])
+  const simulations = useMemo(
+    () => safeSampleSizes.map((N) => normalSamplesByAcceptanceRejection(N, seed)),
+    [sampleSizeKey, seed],
+  )
   const tableRows = useMemo(
     () =>
-      safeSampleSizes.map((N) => {
-        const values = generated.samples.slice(0, N)
+      safeSampleSizes.map((N, index) => {
+        const generated = simulations[index]
+        const values = generated.samples
         const mean = sampleMean(values)
         const variance = sampleVariance(values, mean)
-        const proposals = generated.proposalAtAcceptance[N - 1] ?? generated.proposals
         return {
           N,
           mean,
           variance,
           meanError: Math.abs(mean),
           varianceError: Math.abs(variance - 1),
-          proposals,
-          acceptanceRate: N / proposals,
+          proposals: generated.proposals,
+          acceptedProposals: generated.acceptedProposals,
+          acceptanceRate: generated.acceptedProposals / generated.proposals,
         }
       }),
-    [generated, safeSampleSizes],
+    [sampleSizeKey, simulations],
   )
 
   return (
@@ -492,6 +560,18 @@ export default function AcceptanceRejectionMethod() {
             </ol>
           </div>
         </div>
+        <aside className="border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-slate-700">
+          <p className="font-semibold text-slate-900">Why generate 1.8 times the missing values?</p>
+          <p className="mt-1">
+            Since the theoretical acceptance probability is
+            <InlineEquation latex="1/M=\sqrt{e/(2\pi)}\approx0.6577" />, obtaining
+            <InlineEquation latex="R=N-n" /> accepted values requires about
+            <InlineEquation latex="MR\approx1.52R" /> proposals on average. The choice
+            <InlineEquation latex="m=\lceil1.8R\rceil" /> adds a practical safety margin: it produces about
+            <InlineEquation latex="1.8R/M\approx1.18R" /> accepted values on average, after which only the required
+            values are retained.
+          </p>
+        </aside>
       </section>
 
       <section className="space-y-4">
@@ -512,8 +592,14 @@ export default function AcceptanceRejectionMethod() {
             />
           </label>
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Normalised seed used in the recurrence</p>
-            <p className="mt-1 font-mono text-lg font-semibold text-slate-900">{formatInteger(normaliseSeed(seed))}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Initial LCG states</p>
+            <p className="mt-1 font-mono text-lg font-semibold text-slate-900">
+              u₀: {formatInteger(seed)} · u₁: {formatInteger(seed + 1)}
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              As in the implementation, the two vectors use separate streams with seeds {Math.trunc(seed)} and{' '}
+              {Math.trunc(seed) + 1}.
+            </p>
           </div>
         </div>
 
@@ -535,7 +621,10 @@ export default function AcceptanceRejectionMethod() {
         <p className="text-slate-700">
           Choose three numbers of accepted values and compare the empirical moments with the theoretical
           values <InlineEquation latex="\mathbb E[Z]=0" /> and <InlineEquation latex="\operatorname{Var}(Z)=1" />.
-          The table also reports the empirical acceptance rate.
+          The table also reports the empirical acceptance rate. Each sample is generated independently in batches
+          of size <InlineEquation latex="m=\lceil1.8(N-n)\rceil" />, using
+          <InlineEquation latex="u_0=\operatorname{lcg}(m,\mathrm{seed}+2k)" /> and
+          <InlineEquation latex="u_1=\operatorname{lcg}(m,\mathrm{seed}+2k+1)" />.
         </p>
         <div className="grid gap-4 md:grid-cols-3">
           {safeSampleSizes.map((N, index) => (
@@ -555,7 +644,8 @@ export default function AcceptanceRejectionMethod() {
             <thead>
               <tr>
                 <th className="border border-slate-200 bg-slate-50 px-3 py-2 text-left font-semibold text-slate-500">N accepted</th>
-                <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-500">proposals</th>
+                <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-500">generated proposals</th>
+                <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-500">accepted proposals</th>
                 <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-500">acceptance rate</th>
                 <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-500">mean</th>
                 <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-500">|mean|</th>
@@ -568,6 +658,7 @@ export default function AcceptanceRejectionMethod() {
                 <tr key={`${index}-${row.N}`}>
                   <td className="border border-slate-200 px-3 py-2 text-left font-mono">{formatInteger(row.N)}</td>
                   <td className="border border-slate-200 px-3 py-2 font-mono">{formatInteger(row.proposals)}</td>
+                  <td className="border border-slate-200 px-3 py-2 font-mono">{formatInteger(row.acceptedProposals)}</td>
                   <td className="border border-slate-200 px-3 py-2 font-mono">{fmt(row.acceptanceRate)}</td>
                   <td className="border border-slate-200 px-3 py-2 font-mono">{fmt(row.mean)}</td>
                   <td className="border border-slate-200 px-3 py-2 font-mono">{fmt(row.meanError)}</td>
@@ -577,6 +668,7 @@ export default function AcceptanceRejectionMethod() {
               ))}
               <tr className="font-semibold">
                 <td className="border border-slate-200 bg-emerald-50 px-3 py-2 text-left">Theory</td>
+                <td className="border border-slate-200 bg-emerald-50 px-3 py-2">-</td>
                 <td className="border border-slate-200 bg-emerald-50 px-3 py-2">-</td>
                 <td className="border border-slate-200 bg-emerald-50 px-3 py-2 font-mono">{fmt(THEORETICAL_ACCEPTANCE)}</td>
                 <td className="border border-slate-200 bg-emerald-50 px-3 py-2 font-mono">0.000000</td>
@@ -596,7 +688,11 @@ export default function AcceptanceRejectionMethod() {
         </p>
         <div className="grid gap-4 xl:grid-cols-3">
           {safeSampleSizes.map((N, index) => (
-            <NormalHistogram key={`${index}-${N}`} values={generated.samples.slice(0, N)} title={`N = ${formatInteger(N)}`} />
+            <NormalHistogram
+              key={`${index}-${N}`}
+              values={simulations[index].samples}
+              title={`N = ${formatInteger(N)}`}
+            />
           ))}
         </div>
       </section>
