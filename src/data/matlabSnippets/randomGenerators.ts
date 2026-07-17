@@ -4,7 +4,7 @@ export const lcgSnippets: MatlabSnippet[] = [
   {
     id: 'lcg',
     label: 'Linear congruential generator',
-    code: `function x = lcg(N, seed, a, b)
+    code: `function [x, seed_out] = lcg(N, seed, a, b)
     
     if nargin < 3
         a = 0;
@@ -25,6 +25,8 @@ export const lcgSnippets: MatlabSnippet[] = [
         x(i) = m_i/M;
     end
 
+    seed_out = m_i;
+
     % Scale U(0,1) to U(a,b)
     x = a + (b-a)*x;
 
@@ -36,10 +38,10 @@ export const randu01Snippets: MatlabSnippet[] = [
   {
     id: 'randu01',
     label: 'Uniform U([0,1]) wrapper',
-    code: `function x = randu01(N, seed)
+    code: `function [x, seed_out] = randu01(N, seed)
     % Generate N pseudo-random realizations of U([0,1])
     % using the linear congruential generator function lcg.
-    x = lcg(N, seed, 0, 1);
+    [x, seed_out] = lcg(N, seed, 0, 1);
 
 end`,
   },

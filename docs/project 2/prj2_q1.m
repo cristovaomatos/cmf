@@ -1,7 +1,7 @@
 % Project 2 - Question 1
 
 N = 100000;
-seed = 123; % Note: I'm using the same seed for all...
+seed = 123;
 
 H = halton_nodes(1000);
 
@@ -13,19 +13,22 @@ N_unif = [1000, 10000, 1000000];
 
 fprintf('\nU(0,1) generated with LCG\n');
 fprintf('Theory : mean = %.6f, variance = %.6f\n', 1/2, 1/12);
-fprintf('%10s %12s %12s\n', 'N', 'mean', 'variance');
+fprintf('%10s %14s %14s %12s %12s\n', 'N', 'start seed', 'final seed', 'mean', 'variance');
 
+seed_unif = seed;
 for i = 1:length(N_unif)
-    u = randu01(N_unif(i), seed);
-    fprintf('%10d %12.6f %12.6f\n', N_unif(i), mean(u), var(u));
+    start_seed = seed_unif;
+    [u, seed_unif] = randu01(N_unif(i), start_seed);
+    fprintf('%10d %14d %14d %12.6f %12.6f\n', ...
+        N_unif(i), start_seed, seed_unif, mean(u), var(u));
 end
 
 
 %% Uniform histograms
 
 
-u1 = randu01(1000, seed);
-u2 = randu01(100000, seed);
+[u1, seed_hist] = randu01(1000, seed);
+[u2, ~] = randu01(100000, seed_hist);
 
 edges = linspace(0, 1, 11);
 

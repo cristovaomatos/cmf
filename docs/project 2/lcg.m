@@ -1,4 +1,4 @@
-function x = lcg(N, seed, a, b)
+function [x, seed_out] = lcg(N, seed, a, b)
     
     if nargin < 3
         a = 0;
@@ -19,8 +19,9 @@ function x = lcg(N, seed, a, b)
         x(i) = m_i/M;
     end
 
+    seed_out = m_i;
+
     % Scale U(0,1) to U(a,b)
     x = a + (b-a)*x;
 
 end
-

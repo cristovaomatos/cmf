@@ -4,7 +4,7 @@ import { PageLayout } from '../components/Layout/PageLayout'
 import { EquationBlock, InlineEquation } from '../components/Math/EquationBlock'
 import { Katex } from '../components/Math/Katex'
 import { lcgSnippets, randu01Snippets } from '../data/matlabSnippets'
-import { lcg, matlabModulo, PARK_MILLER_A, PARK_MILLER_B, PARK_MILLER_M } from '../utils/lcg'
+import { matlabModulo, PARK_MILLER_A, PARK_MILLER_B, PARK_MILLER_M } from '../utils/lcg'
 
 const DEFAULT_SAMPLE_SIZES = [1000, 10000, 100000]
 const STEP_COUNT = 8
@@ -30,6 +30,29 @@ function lcgSteps(count: number, seed: number, A = PARK_MILLER_A, B = PARK_MILLE
   }
 
   return rows
+}
+
+function lcgBlock(count: number, seed: number, A = PARK_MILLER_A, B = PARK_MILLER_B, M = PARK_MILLER_M) {
+  const values: number[] = []
+  let state = seed
+
+  for (let i = 0; i < count; i += 1) {
+    state = matlabModulo(A * state + B, M)
+    values.push(state / M)
+  }
+
+  return { values, endSeed: state }
+}
+
+function lcgConsecutiveBlocks(sampleSizes: number[], seed: number) {
+  let startSeed = seed
+
+  return sampleSizes.map((N) => {
+    const { values, endSeed } = lcgBlock(N, startSeed)
+    const block = { N, startSeed, endSeed, values }
+    startSeed = endSeed
+    return block
+  })
 }
 
 function sampleMean(values: number[]) {
@@ -226,24 +249,25 @@ export default function LinearCongruentialGenerator() {
   const [sampleSizes, setSampleSizes] = useState(DEFAULT_SAMPLE_SIZES)
 
   const safeSampleSizes = sampleSizes.map((N) => Math.min(MAX_SAMPLE_SIZE, Math.max(10, Math.trunc(N || 10))))
-  const maxN = Math.max(...safeSampleSizes)
-  const samples = useMemo(() => lcg(maxN, seed), [maxN, seed])
+  const comparisonBlocks = useMemo(() => lcgConsecutiveBlocks(safeSampleSizes, seed), [safeSampleSizes, seed])
   const stepRows = useMemo(() => lcgSteps(STEP_COUNT, seed), [seed])
   const tableRows = useMemo(
     () =>
-      safeSampleSizes.map((N) => {
-        const values = samples.slice(0, N)
+      comparisonBlocks.map((block) => {
+        const values = block.values
         const mean = sampleMean(values)
         const variance = sampleVariance(values, mean)
         return {
-          N,
+          N: block.N,
+          startSeed: block.startSeed,
+          endSeed: block.endSeed,
           mean,
           variance,
           meanError: Math.abs(mean - 0.5),
           varianceError: Math.abs(variance - 1 / 12),
         }
       }),
-    [safeSampleSizes, samples],
+    [comparisonBlocks],
   )
   const stepValues = stepRows.map((row) => row.x)
 
@@ -362,6 +386,14 @@ export default function LinearCongruentialGenerator() {
           <InlineEquation latex="1/2" /> and <InlineEquation latex="1/12" /> as
           <InlineEquation latex="N" /> increases.
         </p>
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p>
+            For the comparison below the simulations are run as consecutive blocks of the same LCG stream.
+            The second block uses the final residue of the first block as its seed, and the third block uses
+            the final residue of the second block. Restarting every block with the same seed would repeat
+            the first values of the generator instead of producing independent-looking segments of the sequence.
+          </p>
+        </div>
         <div className="grid gap-4 md:grid-cols-3">
           {safeSampleSizes.map((N, index) => (
             <SampleSizeInput
@@ -380,6 +412,8 @@ export default function LinearCongruentialGenerator() {
             <thead>
               <tr>
                 <th className="border border-slate-200 bg-slate-50 px-3 py-2 text-left font-semibold text-slate-500">N</th>
+                <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-500">start seed</th>
+                <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-500">final seed</th>
                 <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-500">mean</th>
                 <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-500">|mean - 0.5|</th>
                 <th className="border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-500">variance</th>
@@ -387,9 +421,11 @@ export default function LinearCongruentialGenerator() {
               </tr>
             </thead>
             <tbody>
-              {tableRows.map((row) => (
-                <tr key={row.N}>
+              {tableRows.map((row, index) => (
+                <tr key={`${index}-${row.N}-${row.startSeed}`}>
                   <td className="border border-slate-200 px-3 py-2 text-left font-mono">{formatInteger(row.N)}</td>
+                  <td className="border border-slate-200 px-3 py-2 font-mono">{formatInteger(row.startSeed)}</td>
+                  <td className="border border-slate-200 bg-blue-50 px-3 py-2 font-mono">{formatInteger(row.endSeed)}</td>
                   <td className="border border-slate-200 px-3 py-2 font-mono">{fmt(row.mean)}</td>
                   <td className="border border-slate-200 px-3 py-2 font-mono">{fmt(row.meanError)}</td>
                   <td className="border border-slate-200 px-3 py-2 font-mono">{fmt(row.variance)}</td>
@@ -398,6 +434,8 @@ export default function LinearCongruentialGenerator() {
               ))}
               <tr className="font-semibold">
                 <td className="border border-slate-200 bg-emerald-50 px-3 py-2 text-left">Theory</td>
+                <td className="border border-slate-200 bg-emerald-50 px-3 py-2 font-mono">-</td>
+                <td className="border border-slate-200 bg-emerald-50 px-3 py-2 font-mono">-</td>
                 <td className="border border-slate-200 bg-emerald-50 px-3 py-2 font-mono">0.500000</td>
                 <td className="border border-slate-200 bg-emerald-50 px-3 py-2 font-mono">0</td>
                 <td className="border border-slate-200 bg-emerald-50 px-3 py-2 font-mono">0.083333</td>
@@ -415,8 +453,12 @@ export default function LinearCongruentialGenerator() {
           density is the horizontal line <InlineEquation latex="f(x)=1" />.
         </p>
         <div className="grid gap-4 xl:grid-cols-3">
-          {safeSampleSizes.map((N, index) => (
-            <UniformHistogram key={`${index}-${N}`} values={samples.slice(0, N)} title={`N = ${formatInteger(N)}`} />
+          {comparisonBlocks.map((block, index) => (
+            <UniformHistogram
+              key={`${index}-${block.N}-${block.startSeed}`}
+              values={block.values}
+              title={`Block ${index + 1}: N = ${formatInteger(block.N)}`}
+            />
           ))}
         </div>
       </section>

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AppShell } from './components/Layout/AppShell'
 import Project1Overview from './pages/Project1Overview'
 import OptionPayoffs from './pages/OptionPayoffs'
@@ -33,8 +33,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/options-theory/option-payoffs" replace />} />
         <Route element={<AppShell />}>
+          <Route path="/" element={<OptionPayoffs />} />
           <Route path="/options-theory/option-payoffs" element={<OptionPayoffs />} />
           <Route path="/options-theory/european-and-american-options" element={<EuropeanAmericanOptions />} />
           <Route path="/options-theory/black-scholes-equation" element={<BlackScholesDerivation />} />

@@ -11,7 +11,7 @@ export interface RouteEntry {
 }
 
 export const routeList: RouteEntry[] = [
-  { path: '/options-theory/option-payoffs', label: 'Option Payoffs', section: 'optionsTheory' },
+  { path: '/', label: 'Option Payoffs', section: 'optionsTheory' },
   { path: '/options-theory/european-and-american-options', label: 'European and American Options', section: 'optionsTheory' },
   { path: '/options-theory/black-scholes-equation', label: 'Black-Scholes Equation', section: 'optionsTheory' },
   { path: '/options-theory/black-scholes-analytic-solution', label: 'Analytic Black-Scholes Solution', section: 'optionsTheory' },
@@ -43,5 +43,8 @@ export const sectionLabels: Record<Section, string> = {
 }
 
 export function routeIndex(pathname: string): number {
+  if (pathname === '/options-theory/option-payoffs') {
+    return 0
+  }
   return routeList.findIndex((r) => r.path === pathname)
 }
