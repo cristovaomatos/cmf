@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { routeList, sectionLabels, type Section } from '../../routes'
 
 const sections: Section[] = [
+  'project',
   'optionsTheory',
   'numericalPdeMethods',
   'americanOptionMethods',

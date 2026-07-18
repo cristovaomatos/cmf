@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AppShell } from './components/Layout/AppShell'
+import Home from './pages/Home'
 import Project1Overview from './pages/Project1Overview'
 import OptionPayoffs from './pages/OptionPayoffs'
 import EuropeanAmericanOptions from './pages/EuropeanAmericanOptions'
@@ -34,7 +35,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<AppShell />}>
-          <Route path="/" element={<OptionPayoffs />} />
+          <Route path="/" element={<Home />} />
           <Route path="/options-theory/option-payoffs" element={<OptionPayoffs />} />
           <Route path="/options-theory/european-and-american-options" element={<EuropeanAmericanOptions />} />
           <Route path="/options-theory/black-scholes-equation" element={<BlackScholesDerivation />} />
